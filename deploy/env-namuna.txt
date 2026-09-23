@@ -1,0 +1,52 @@
+# ==========================================================================
+#  SERVER uchun .env namunasi
+#  Serverda:  cp .env.prod.example .env   va quyidagilarni to'ldiring
+# ==========================================================================
+
+# --- Baza ----------------------------------------------------------------
+# DATABASE_URL ni QO'LDA YOZMANG — docker-compose.prod.yml uni o'zi quradi.
+POSTGRES_DB=barter
+POSTGRES_USER=barter
+# MAJBURIY. Uzun, tasodifiy parol qo'ying. Yaratish:  openssl rand -base64 24
+POSTGRES_PASSWORD=
+
+# --- Port ----------------------------------------------------------------
+# Band bo'lmagan portni tanlang. Tekshirish:
+#   sudo ss -tlnp | grep -E ':(80|443|8080|8090)'
+APP_PORT=8090
+
+# Ilova qayerdan ochilsin:
+#   0.0.0.0    -> to'g'ridan-to'g'ri internetdan: http://SERVER_IP:APP_PORT
+#                 (serverda nginx bo'lmasa yoki u Docker'da boshqa loyihaniki bo'lsa)
+#   127.0.0.1  -> faqat server ichidan; oldida nginx turadi va shu manzilga proksi qiladi
+BIND_HOST=0.0.0.0
+
+# --- Vaqt mintaqasi ------------------------------------------------------
+TZ=Asia/Tashkent
+
+# --- Xavfsizlik ----------------------------------------------------------
+# HTTP (IP orqali) ishlayotganda MAJBURAN false bo'lishi kerak,
+# aks holda cookie yuborilmaydi va tizimga kira olmaysiz.
+# HTTPS ulangandan keyin true ga o'zgartiring va konteynerni qayta ishga tushiring.
+SECURE_COOKIES=false
+
+# Sessiya necha kun amal qiladi
+SESSION_DAYS=14
+
+# Next.js server action'lari uchun ruxsat etilgan manzillar.
+# Reverse proxy ortida ishlaganda to'ldiring (vergul bilan, port bilan birga):
+#   ALLOWED_ORIGINS=91.200.10.5:8090,barter.domen.uz
+# Bo'sh qoldirilsa — Next standart tekshiruvidan foydalanadi.
+ALLOWED_ORIGINS=
+
+# --- Admin ---------------------------------------------------------------
+# Faqat BAZA BIRINCHI MARTA yaratilganda ishlaydi.
+# "admin" qoldirsangiz, birinchi kirishda parolni almashtirish so'raladi.
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin
+
+# --- Telegram bot --------------------------------------------------------
+# true bo'lsa, rejali hisobotlar va /bugun, /hafta buyruqlari shu server ichida ishlaydi.
+# Token va Chat ID lar saytdagi «Bot sozlamalari» sahifasidan kiritiladi.
+# DIQQAT: ilovani bir nechta nusxada ishlatsangiz, faqat bittasida true qoldiring.
+ENABLE_BOT=true

@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-barter}
+      POSTGRES_USER: ${POSTGRES_USER:-barter}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-barter}
+      TZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-barter} -d ${POSTGRES_DB:-barter}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  web:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-barter}:${POSTGRES_PASSWORD:-barter}@db:5432/${POSTGRES_DB:-barter}?schema=public&connection_limit=10
+      TZ: ${TZ:-Asia/Tashkent}
+      PORT: 3000
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - '${APP_PORT:-3000}:3000'
+
+volumes:
+  pgdata:

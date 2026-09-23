@@ -1,0 +1,81 @@
+# ==========================================================================
+#  TXT Barter — SERVER (production) uchun
+#  Ishlatish:  docker compose -f docker-compose.prod.yml up -d --build
+#
+#  Port to'qnashuvidan himoya:
+#   • Postgres umuman tashqariga chiqarilmaydi (faqat ichki Docker tarmog'i).
+#   • Web faqat 127.0.0.1:${APP_PORT} ga bog'lanadi — internetdan to'g'ridan-to'g'ri
+#     ochilmaydi, unga faqat serverdagi nginx murojaat qiladi.
+#   • `name: barter` — konteyner/tarmoq/volume nomlari boshqa loyihalarniki bilan
+#     aralashib ketmasligi uchun.
+# ==========================================================================
+name: barter
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: barter-db
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-barter}
+      POSTGRES_USER: ${POSTGRES_USER:-barter}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?.env faylida POSTGRES_PASSWORD ni to'ldiring}
+      TZ: ${TZ:-Asia/Tashkent}
+      PGTZ: ${TZ:-Asia/Tashkent}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # DIQQAT: `ports:` yo'q — baza faqat ichki tarmoqdan ko'rinadi.
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-barter} -d ${POSTGRES_DB:-barter}']
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: barter-web:latest
+    container_name: barter-web
+    restart: always
+    env_file: .env
+    volumes:
+      # IP-telefoniya audio yozuvlari (konteyner qayta qurilganda ham saqlanadi)
+      - calls:/app/data/calls
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-barter}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-barter}?schema=public&connection_limit=10&pool_timeout=20
+      TZ: ${TZ:-Asia/Tashkent}
+      NODE_ENV: production
+      PORT: 3000
+    depends_on:
+      db:
+        condition: service_healthy
+    # Faqat serverning o'zidan ochiladi. Nginx shu manzilga proksi qiladi.
+    ports:
+      - '127.0.0.1:${APP_PORT:-3210}:3000'
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 90s
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'
+
+volumes:
+  pgdata:
+    name: barter_pgdata
+  calls:
+    name: barter_calls

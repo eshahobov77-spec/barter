@@ -1,0 +1,386 @@
+// TXT BARTER — ma'lumotlar bazasi sxemasi
+// Django modellarining to'liq ekvivalenti.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Foydalanuvchi: admin yoki menejer.
+model User {
+  id                 Int       @id @default(autoincrement())
+  username           String    @unique
+  passwordHash       String
+  fullName           String    @default("")
+  /// "admin" | "manager"
+  role               String    @default("manager")
+  isActive           Boolean   @default(true)
+  /// Birinchi kirishda parolni almashtirish talab qilinadi
+  mustChangePassword Boolean   @default(false)
+  lastLogin          DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  tjms            Tjm[]         @relation("UserTjms")
+  sessions        Session[]
+  transactions    Transaction[] @relation("TxCreatedBy")
+  notes           Note[]        @relation("NoteCreatedBy")
+  contractsMade   Contract[]    @relation("ContractCreatedBy")
+  contractsClosed Contract[]    @relation("ContractClosedBy")
+  auditLogs       AuditLog[]
+
+  @@index([fullName])
+}
+
+/// Kirish sessiyasi (cookie'dagi ID shu yozuvga ishora qiladi).
+model Session {
+  id        String   @id
+  userId    Int
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  ip        String?
+  userAgent String   @default("")
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// Turar-joy majmuasi (obyekt).
+model Tjm {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  contracts Contract[]
+  managers  User[]     @relation("UserTjms")
+
+  @@index([name])
+}
+
+/// Barterchi — material/xizmat yetkazib beruvchi.
+model Supplier {
+  id        Int      @id @default(autoincrement())
+  fullName  String
+  searchKey String
+  createdAt DateTime @default(now())
+
+  phones    SupplierPhone[]
+  contracts Contract[]
+
+  @@index([searchKey])
+  @@index([fullName])
+}
+
+model SupplierPhone {
+  id         Int      @id @default(autoincrement())
+  supplierId Int
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  phone      String
+
+  @@unique([supplierId, phone])
+  @@index([phone])
+}
+
+/// Barter shartnomasi.
+model Contract {
+  id           Int       @id @default(autoincrement())
+  supplierId   Int
+  supplier     Supplier  @relation(fields: [supplierId], references: [id])
+  tjmId        Int
+  tjm          Tjm       @relation(fields: [tjmId], references: [id])
+  number       String
+  contractDate DateTime?
+
+  totalAmount     Decimal   @default(0) @db.Decimal(18, 2)
+  /// Yopilgan qism = boshlang'ich chek + barcha tushumlar
+  paidAmount      Decimal   @default(0) @db.Decimal(18, 2)
+  remainingAmount Decimal   @default(0) @db.Decimal(18, 2)
+  /// Grafik bo'yicha belgilangan qarzdorlik summasi
+  monthlyAmount   Decimal   @default(0) @db.Decimal(18, 2)
+  debtSetAt       DateTime?
+  /// Hozirgi qarzdorlik (monthlyAmount − debtSetAt dan keyingi tushumlar)
+  debtAmount      Decimal   @default(0) @db.Decimal(18, 2)
+  currency        String    @default("UZS")
+
+  materialType  String @default("")
+  /// material | texnika | xizmat | oziq_ovqat | boshqa
+  materialGroup String @default("boshqa")
+  /// "" | doimiy | orta | toxtagan | yoq
+  supplyStatus  String @default("")
+
+  isClosed    Boolean   @default(false)
+  closedAt    DateTime?
+  closedById  Int?
+  closedBy    User?     @relation("ContractClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
+  /// "" | bajarildi | uy_qaytarildi | bekor
+  closeReason String    @default("")
+  closeNote   String    @default("")
+
+  lastPaymentAt DateTime?
+  createdById   Int?
+  createdBy     User?     @relation("ContractCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  transactions Transaction[]
+  notes        Note[]
+  reminders    ReminderLog[]
+  calls        CallRecord[]
+
+  @@unique([tjmId, number])
+  @@index([tjmId, isClosed])
+  @@index([remainingAmount])
+  @@index([debtAmount])
+  @@index([lastPaymentAt])
+  @@index([number])
+}
+
+/// Tushum: material, ish hajmi (abyom), pul yoki boshlang'ich chek.
+model Transaction {
+  id         Int      @id @default(autoincrement())
+  contractId Int
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  amount     Decimal  @db.Decimal(18, 2)
+  /// material | abyom | pul | boshlangich
+  kind       String   @default("material")
+  /// Operatsiya sanasi (vaqtsiz kun)
+  operationDate DateTime @db.Date
+  note        String   @default("")
+  createdById Int?
+  createdBy   User?    @relation("TxCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([contractId])
+  @@index([operationDate])
+  @@index([createdAt])
+  @@index([kind])
+}
+
+/// Shartnoma bo'yicha izoh / qo'ng'iroq yozuvi.
+model Note {
+  id         Int      @id @default(autoincrement())
+  contractId Int
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  /// qongiroq | javobsiz | uchrashuv | izoh | import
+  kind       String   @default("izoh")
+  text       String   @default("")
+  createdById Int?
+  createdBy   User?    @relation("NoteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  /// Qo'ng'iroqda berilgan va'da (bo'lsa)
+  promiseDate   DateTime? @db.Date
+  promiseWhat   String    @default("")
+  promiseAmount Decimal   @default(0) @db.Decimal(18, 2)
+  /// Izoh qo'ng'iroq yozuvidan avtomatik yaratilgan bo'lsa
+  callId        Int?
+
+  @@index([contractId])
+  @@index([createdAt])
+  @@index([kind])
+}
+
+/// Audit log — tizimdagi barcha amallar.
+model AuditLog {
+  id         Int      @id @default(autoincrement())
+  createdAt  DateTime @default(now())
+  userId     Int?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  username   String   @default("")
+  action     String
+  detail     String   @default("")
+  objectType String   @default("")
+  objectId   String   @default("")
+  ip         String?
+
+  @@index([createdAt])
+  @@index([action])
+  @@index([username])
+}
+
+/// Telegram bot sozlamalari — yagona yozuv (id = 1).
+model BotSettings {
+  id              Int      @id @default(1)
+  token           String   @default("")
+  chatIds         String   @default("")
+  dailyEnabled    Boolean  @default(true)
+  /// "HH:MM"
+  dailyTime       String   @default("20:00")
+  weeklyEnabled   Boolean  @default(true)
+  /// 0 = Dushanba … 6 = Yakshanba
+  weeklyDay       Int      @default(5)
+  notifyPayments  Boolean  @default(true)
+  notifyNew       Boolean  @default(true)
+  notifyClosed    Boolean  @default(true)
+  commandsEnabled Boolean  @default(true)
+  lastDailySent   DateTime?
+  lastWeeklySent  DateTime?
+
+  // ---- Barterchilar boti (portal) va eslatmalar
+  /// Barterchilar botga kirib o'z shartnomasini ko'ra oladi
+  supplierBotEnabled Boolean   @default(false)
+  /// Muddat eslatmalarini avtomatik yuborish
+  remindEnabled      Boolean   @default(false)
+  /// Har oyning nechanchi sanasigacha qarzdorlik topshirilishi kerak (1..31)
+  remindDueDay       Int       @default(10)
+  /// Muddatdan necha kun oldin eslatiladi (0 = oldindan eslatilmaydi)
+  remindDaysBefore   Int       @default(3)
+  /// Muddat o'tgach har necha kunda takrorlanadi (0 = faqat bir marta)
+  remindOverdueEvery Int       @default(3)
+  /// "HH:MM" — eslatmalar yuboriladigan vaqt
+  remindTime         String    @default("10:00")
+  /// Barterchiga ko'rsatiladigan aloqa telefoni
+  supportPhone       String    @default("")
+  lastRemindRun      DateTime?
+
+  updatedAt       DateTime @updatedAt
+}
+
+/// Botga telefon raqami orqali ulangan barterchi chati.
+/// Barterchi = shu telefon raqami yozilgan barcha Supplier yozuvlari
+/// (telefon saytda o'zgartirilsa, ruxsat ham avtomatik o'zgaradi).
+model SupplierChat {
+  id                 Int      @id @default(autoincrement())
+  chatId             String   @unique
+  /// +998901234567 — Telegram tasdiqlagan raqam
+  phone              String
+  tgName             String   @default("")
+  tgUsername         String   @default("")
+  selectedContractId Int?
+  /// Bot bloklangan bo'lsa false
+  isActive           Boolean  @default(true)
+  linkedAt           DateTime @default(now())
+  lastSeenAt         DateTime @default(now())
+
+  @@index([phone])
+}
+
+/// Barterchiga yuborilgan muddat eslatmalari jurnali (takror yubormaslik uchun).
+model ReminderLog {
+  id         Int      @id @default(autoincrement())
+  contractId Int
+  contract   Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  chatId     String
+  /// oldin | bugun | otgan
+  kind       String
+  dueDate    DateTime @db.Date
+  sentOn     DateTime @db.Date
+  amount     Decimal  @db.Decimal(18, 2)
+  ok         Boolean  @default(true)
+  error      String   @default("")
+  createdAt  DateTime @default(now())
+
+  @@unique([contractId, chatId, kind, dueDate, sentOn])
+  @@index([createdAt])
+}
+
+/// IP-telefoniya: provayderdan kelgan qo'ng'iroq yozuvi va uning AI tahlili.
+model CallRecord {
+  id          Int       @id @default(autoincrement())
+  /// generic | zadarma | onlinepbx | beeline | ... (webhook manzilidagi nom)
+  provider    String
+  /// Provayderdagi qo'ng'iroq ID si — takroriy yuborishdan himoya
+  externalId  String
+  /// in | out | ""
+  direction   String    @default("")
+  fromPhone   String    @default("")
+  toPhone     String    @default("")
+  /// Barterchi raqami (+998…), aniqlangan bo'lsa
+  clientPhone String    @default("")
+  startedAt   DateTime?
+  durationSec Int       @default(0)
+
+  /// Audio manbasi (provayder havolasi) va serverda saqlangan fayl
+  audioUrl    String    @default("")
+  audioPath   String    @default("")
+  audioMime   String    @default("")
+  audioBytes  Int       @default(0)
+
+  /// waiting_audio | received | done | skipped | failed
+  status      String    @default("received")
+  /// Qayerda to'xtagani: download | stt | analyze
+  stage       String    @default("")
+  attempts    Int       @default(0)
+  nextTryAt   DateTime  @default(now())
+  error       String    @default("")
+
+  transcript    String    @default("")
+  summary       String    @default("")
+  promiseDate   DateTime? @db.Date
+  promiseWhat   String    @default("")
+  promiseAmount Decimal   @default(0) @db.Decimal(18, 2)
+
+  supplierId  Int?
+  contractId  Int?
+  contract    Contract? @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  noteId      Int?
+  /// Provayder yuborgan xom metadata
+  meta        Json?
+
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([provider, externalId])
+  @@index([status, nextTryAt])
+  @@index([clientPhone])
+  @@index([contractId])
+  @@index([createdAt])
+}
+
+/// IP-telefoniya sozlamalari — yagona yozuv (id = 1).
+model TelephonySettings {
+  id             Int      @id @default(1)
+  enabled        Boolean  @default(false)
+  /// API token sha256 xeshi — token o'zi faqat yaratilganda bir marta ko'rsatiladi
+  tokenHash      String   @default("")
+  tokenHint      String   @default("")
+  /// Ixtiyoriy HMAC-SHA256 imzo siri (X-Signature sarlavhasi)
+  hmacSecret     String   @default("")
+  /// Kompaniyaning o'z raqamlari (vergul bilan) — barterchi raqamini ajratish uchun
+  ownNumbers     String   @default("")
+
+  /// Nutqni matnga: OpenAI-mos /audio/transcriptions (OpenAI Whisper, Groq, o'z Whisper serveringiz)
+  sttUrl         String   @default("https://api.openai.com/v1/audio/transcriptions")
+  sttKey         String   @default("")
+  sttModel       String   @default("whisper-1")
+  sttLanguage    String   @default("uz")
+
+  /// Xulosa uchun AI: anthropic | openai (OpenAI-mos /chat/completions)
+  llmProvider    String   @default("anthropic")
+  llmUrl         String   @default("")
+  llmKey         String   @default("")
+  llmModel       String   @default("claude-haiku-4-5-20251001")
+
+  autoNote       Boolean  @default(true)
+  minDurationSec Int      @default(10)
+  maxMb          Int      @default(50)
+  keepDays       Int      @default(180)
+
+  /// Provayder bo'yicha maydon moslashtirish: {"onlinepbx": {"externalId": "uuid", ...}}
+  mappings       Json?
+  zadarmaKey     String   @default("")
+  zadarmaSecret  String   @default("")
+
+  updatedAt      DateTime @updatedAt
+}
+
+/// Kelgan webhook so'rovlari jurnali (maydonlarni moslashtirish uchun). Oxirgi 300 tasi saqlanadi.
+model TelephonyInbox {
+  id          Int      @id @default(autoincrement())
+  provider    String
+  ip          String   @default("")
+  contentType String   @default("")
+  body        String   @default("")
+  ok          Boolean  @default(true)
+  message     String   @default("")
+  callId      Int?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}

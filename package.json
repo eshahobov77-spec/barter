@@ -1,0 +1,30 @@
+{
+  "name": "txt-barter-next",
+  "version": "2.0.0",
+  "private": true,
+  "description": "TXT BARTER BY EZZYJON — Next.js versiyasi",
+  "scripts": {
+    "dev": "next dev",
+    "build": "prisma generate && next build",
+    "start": "next start -p ${PORT:-3000}",
+    "postinstall": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "node scripts/seed.mjs"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.1.0",
+    "chart.js": "^4.4.7",
+    "exceljs": "^4.4.0",
+    "lucide-react": "^0.460.0",
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "prisma": "^6.1.0",
+    "typescript": "^5.7.0"
+  }
+}
