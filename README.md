@@ -204,3 +204,5 @@ sudo cp deploy/nginx/barter.conf /etc/nginx/sites-available/ && \
   tavsiya etiladi.
 - Sana hisob-kitoblari jarayonning `TZ` o'zgaruvchisiga tayanadi (Docker'da
   `Asia/Tashkent`). Boshqa mintaqada ishlatsangiz, `TZ` ni mos ravishda o'rnating.
+#   b a r t e r  
+ 
